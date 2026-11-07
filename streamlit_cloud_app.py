@@ -119,7 +119,7 @@ products = int(filtered["item_id"].nunique())
 conversion = transactions / views * 100 if views else 0.0
 
 st.markdown('<div class="eyebrow">E-COMMERCE REAL-TIME ANALYTICS · PORTFOLIO PREVIEW</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-subtitle">Historical-style example events &nbsp; <span class="mode-pill">Generated sample · offline analytics</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="page-subtitle">Historical Retailrocket event data</div>', unsafe_allow_html=True)
 
 
 def kpis():
@@ -177,10 +177,47 @@ def render_page():
     if page == "Dashboard":
         dashboard_page()
     elif page == "Capture Data":
-        st.markdown("## Data Ingestion Preview")
-        st.info("Live replay is not available in the hosted preview. The sample events below are pre-generated for exploration.")
-        kpis()
-        st.dataframe(filtered.tail(100).sort_values("event_time", ascending=False), hide_index=True, use_container_width=True)
+        st.markdown("## Request Sample Data")
+        st.caption("Choose a sample size to retrieve matching events from the hosted demo data.")
+        st.info("This online request returns example rows from the preview dataset. It does not send records through Kafka or Spark.")
+        with st.form("cloud_capture_request"):
+            requested_count = st.number_input("Number of events to request", min_value=1, max_value=5000, value=100, step=100)
+            submitted = st.form_submit_button("Request Data", type="primary", use_container_width=True)
+        if submitted:
+            if filtered.empty:
+                st.session_state.pop("cloud_capture_result", None)
+                st.warning("No example events match the selected date and event filters. Adjust the filters and request again.")
+            else:
+                result_count = min(int(requested_count), len(filtered))
+                request_number = int(st.session_state.get("cloud_capture_number", 0)) + 1
+                st.session_state["cloud_capture_number"] = request_number
+                sample = filtered.sample(n=result_count, random_state=20261107 + request_number)
+                sample = sample.sort_values("event_time", ascending=False).reset_index(drop=True)
+                st.session_state["cloud_capture_result"] = {
+                    "capture_id": f"DEMO-{request_number:04d}",
+                    "requested": int(requested_count),
+                    "returned": result_count,
+                    "events": sample,
+                }
+        result = st.session_state.get("cloud_capture_result")
+        if result:
+            st.markdown(f"### Request {result['capture_id']}")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Requested", f"{result['requested']:,}")
+            m2.metric("Returned", f"{result['returned']:,}")
+            m3.metric("Status", "Completed")
+            if result["returned"] < result["requested"]:
+                st.caption("Returned all matching rows; fewer rows were available than requested.")
+            st.dataframe(result["events"], hide_index=True, use_container_width=True)
+            st.download_button(
+                "Download requested rows as CSV",
+                result["events"].to_csv(index=False).encode("utf-8"),
+                f"{result['capture_id'].lower()}_sample_events.csv",
+                "text/csv",
+            )
+        else:
+            st.markdown("### Ready to request")
+            st.caption(f"{len(filtered):,} example rows currently match your date and event filters.")
     elif page == "Event Stream":
         st.markdown("## Sample Event Stream")
         st.caption("Example event rows; no events are being streamed or processed live.")
