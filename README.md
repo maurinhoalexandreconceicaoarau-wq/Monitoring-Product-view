@@ -51,6 +51,18 @@ docker compose logs -f
 
 The dashboard is bound to `127.0.0.1` and is not exposed to other machines on the network. The original dataset is mounted read-only, while generated output and state remain in the project `artifacts/` folder.
 
+## Publish a lightweight online preview
+
+The root-level `streamlit_cloud_app.py` is a portfolio preview for Streamlit Community Cloud. It uses generated sample events and does not start Kafka or Spark, so it can run from this GitHub repository without uploading the large Retailrocket CSV files. It clearly labels all displayed values as generated examples. It is separate from `app.py`, which remains the full local Kafka/Spark dashboard.
+
+To publish the preview:
+
+1. Sign in at [Streamlit Community Cloud](https://share.streamlit.io/) with the GitHub account that can access this repository.
+2. Choose **Create app**, then select this repository, branch `main`, and entrypoint `streamlit_cloud_app.py`.
+3. Deploy. The service will install the lightweight packages from the root `requirements.txt` and provide a public `*.streamlit.app` URL.
+
+Push later code changes to `main`; Community Cloud can redeploy from the updated GitHub source. The preview is not connected to the source dataset or live pipeline. Use Docker Compose locally for the full Kafka and Spark simulation.
+
 ## Dashboard menus
 
 - **Dashboard:** processed event totals, daily historical event trend, funnel, click data limitation, product IDs, no-purchase sessions, and pipeline state.
