@@ -90,6 +90,9 @@ def dark_chart(fig, height=330):
 
 
 events = demo_events()
+requested_events = st.session_state.get("cloud_requested_events", pd.DataFrame(columns=events.columns))
+if not requested_events.empty:
+    events = pd.concat([events, requested_events], ignore_index=True)
 with st.sidebar:
     st.markdown('<div class="side-brand">E-Commerce Monitor</div><div class="side-sub">RETAILROCKET ANALYTICS<br>Historical Behavior Dashboard</div>', unsafe_allow_html=True)
     page = st.radio("WORKSPACE", PAGES, format_func=lambda value: PAGE_LABELS[value], label_visibility="visible", key="cloud_main_page")
@@ -189,27 +192,51 @@ def render_page():
                 st.warning("No example events match the selected date and event filters. Adjust the filters and request again.")
             else:
                 requested_count = int(st.session_state["cloud_requested_count"])
-                result_count = min(requested_count, len(filtered))
+                previous = st.session_state.get("cloud_requested_events", pd.DataFrame(columns=events.columns))
                 request_number = int(st.session_state.get("cloud_capture_number", 0)) + 1
                 st.session_state["cloud_capture_number"] = request_number
-                sample = filtered.sample(n=result_count, random_state=20261107 + request_number)
-                sample = sample.sort_values("event_time", ascending=False).reset_index(drop=True)
+                templates = filtered.sample(
+                    n=requested_count,
+                    replace=requested_count > len(filtered),
+                    random_state=20261107 + request_number,
+                ).copy()
+                # Each successful hosted request adds new demo events and new
+                # anonymous visitor IDs, so the visible cumulative totals move.
+                next_visitor_id = max(int(events["visitor_id"].max()), int(previous["visitor_id"].max()) if not previous.empty else 0) + 1
+                templates["visitor_id"] = np.arange(next_visitor_id, next_visitor_id + len(templates))
+                new_rows = templates.sort_values("event_time", ascending=False).reset_index(drop=True)
+                cumulative = pd.concat([previous, new_rows], ignore_index=True)
+                st.session_state["cloud_requested_events"] = cumulative
                 st.session_state["cloud_capture_result"] = {
                     "capture_id": f"DEMO-{request_number:04d}",
-                    "requested": int(st.session_state["cloud_requested_count"]),
-                    "returned": result_count,
-                    "events": sample,
+                    "requested": requested_count,
+                    "returned": len(new_rows),
                 }
-        kpis()
+        captured = st.session_state.get("cloud_requested_events", pd.DataFrame(columns=events.columns))
+        all_events = pd.concat([demo_events(), captured], ignore_index=True)
+        captured_views = int(all_events["event_type"].eq("view").sum())
+        captured_carts = int(all_events["event_type"].eq("addtocart").sum())
+        captured_transactions = int(all_events["event_type"].eq("transaction").sum())
+        captured_visitors = int(all_events["visitor_id"].nunique())
+        captured_conversion = captured_transactions / captured_views * 100 if captured_views else 0.0
+        cols = st.columns(4)
+        for col, label, value, note in zip(
+            cols,
+            ["Sample events", "Sample visitors", "Product views", "Transactions / views"],
+            [f"{len(all_events):,}", f"{captured_visitors:,}", f"{captured_views:,}", f"{captured_conversion:.2f}%"],
+            [f"{len(captured):,} requested rows", "Distinct visitor IDs", f"{captured_carts:,} cart additions", f"{captured_transactions:,} transactions"],
+        ):
+            col.metric(label, value, note)
         result = st.session_state.get("cloud_capture_result")
         if result:
-            display_rows = result["events"]
-            st.caption(f"Request {result['capture_id']} completed · {result['returned']:,} of {result['requested']:,} events returned.")
+            display_rows = captured.sort_values("event_time", ascending=False)
+            st.caption(f"Request {result['capture_id']} completed · {result['returned']:,} rows returned · {len(captured):,} requested rows in this session.")
             if result["returned"] < result["requested"]:
                 st.caption("Fewer matching rows were available than requested.")
         else:
-            display_rows = filtered.tail(100).sort_values("event_time", ascending=False)
-            st.caption(f"Showing up to 100 matching event rows · {len(filtered):,} events match the current filters.")
+            display_rows = captured
+            st.caption("Request data to see returned records and update the totals above.")
+        display_rows = display_rows.drop(columns=["source_row"], errors="ignore")
         st.dataframe(display_rows, hide_index=True, use_container_width=True)
         if result:
             st.download_button(
