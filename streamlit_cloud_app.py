@@ -188,7 +188,8 @@ def render_page():
                 st.session_state.pop("cloud_capture_result", None)
                 st.warning("No example events match the selected date and event filters. Adjust the filters and request again.")
             else:
-                result_count = min(int(requested_count), len(filtered))
+                requested_count = int(st.session_state["cloud_requested_count"])
+                result_count = min(requested_count, len(filtered))
                 request_number = int(st.session_state.get("cloud_capture_number", 0)) + 1
                 st.session_state["cloud_capture_number"] = request_number
                 sample = filtered.sample(n=result_count, random_state=20261107 + request_number)
