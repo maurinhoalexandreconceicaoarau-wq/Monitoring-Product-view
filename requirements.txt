@@ -1,0 +1,5 @@
+streamlit>=1.37,<2
+plotly>=5.18,<7
+pandas>=2.0,<4
+kafka-python>=2.0,<3
+pyspark>=4.0,<5
