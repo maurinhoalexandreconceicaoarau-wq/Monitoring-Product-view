@@ -1,113 +1,244 @@
-"""Lightweight, clearly labeled showcase dashboard for Streamlit Community Cloud."""
-from datetime import date, timedelta
-
+﻿"""Cloud-friendly visual preview of the E-Commerce Monitor dashboard."""
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 
-st.set_page_config(
-    page_title="E-Commerce Analytics Demo",
-    page_icon="📊",
-    layout="wide",
-)
+st.set_page_config(page_title="E-Commerce Monitor", page_icon="📊", layout="wide")
 
-COLORS = {"view": "#8b75ff", "addtocart": "#35c6b3", "transaction": "#ffb45f"}
+EVENT_TYPES = ["view", "addtocart", "transaction"]
+EVENT_COLORS = {"view": "#9b7cff", "addtocart": "#42d4bd", "transaction": "#ffb65f"}
+PAGES = ["Dashboard", "Capture Data", "Event Stream", "Analytics", "Pipeline", "Database", "Visualization", "Tableau Exports"]
+PAGE_LABELS = {
+    "Dashboard": "▦  Dashboard",
+    "Capture Data": "⇧  Data Ingestion",
+    "Event Stream": "≋  Preprocessing",
+    "Analytics": "◒  Transaction Analytics",
+    "Pipeline": "⌘  Pipeline Status",
+    "Database": "▤  Database",
+    "Visualization": "▤  Product Analytics",
+    "Tableau Exports": "⇩  Reports",
+}
+
+st.markdown("""
+<style>
+:root{color-scheme:dark}
+.stApp{background:radial-gradient(ellipse at 80% -20%,#211345 0,transparent 38%),#0b0d20;color:#eeeefe}
+[data-testid="stHeader"]{background:rgba(11,13,32,.94)}
+.block-container{max-width:1680px;padding:1.4rem 2rem 3rem}
+h1,h2,h3,h4{letter-spacing:-.035em;color:#f2f0ff}
+h1{font-size:1.9rem!important;font-weight:750}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#090b1d,#0c0d21 72%,#100b25);border-right:1px solid #272347}
+[data-testid="stSidebarContent"]{padding:1.25rem .9rem}
+[data-testid="stRadio"] [role="radiogroup"]{gap:.32rem;background:transparent;border:0;padding:.2rem}
+[data-testid="stRadio"] label{padding:.62rem .7rem;border-radius:9px;color:#aeadc5!important}
+[data-testid="stRadio"] label:has(input:checked){background:linear-gradient(95deg,#5938ba,#352467);color:#fff!important;box-shadow:0 4px 16px #613bea40}
+[data-testid="stMetric"]{background:linear-gradient(145deg,#181832,#12152b);border:1px solid #302b59;border-radius:15px;padding:15px 17px;min-height:112px;box-shadow:0 8px 24px #08091455}
+[data-testid="stMetricLabel"]{color:#aaa9c5!important;font-size:.78rem;letter-spacing:.02em}
+[data-testid="stMetricValue"]{color:#f6f4ff;font-size:1.75rem;font-weight:720}
+[data-testid="stVerticalBlockBorderWrapper"]{background:linear-gradient(145deg,#15172d,#111326);border:1px solid #302b50;border-radius:16px;box-shadow:0 8px 26px #08091430}
+.stButton>button,[data-testid="stDownloadButton"] button{border-radius:10px;border:1px solid #7c5cf3;background:#7254ea;color:#fff;font-weight:650}
+.stButton>button:hover,[data-testid="stDownloadButton"] button:hover{background:#8869ff;color:#fff;border-color:#9a82ff}
+[data-testid="stDataFrame"]{border:1px solid #302f48;border-radius:10px;overflow:hidden}
+[data-testid="stAlert"]{border-radius:11px;background:#1a1929}
+[data-testid="stPlotlyChart"]{border-radius:12px}
+.side-brand{font-size:1.25rem;font-weight:850;letter-spacing:-.04em;color:#faf8ff;margin:.25rem 0 0}
+.side-sub{font-size:.68rem;color:#9998b5;line-height:1.5;margin:.2rem 0 1.3rem}
+.side-status{border:1px solid #2d2d46;border-radius:12px;background:#151625;padding:.7rem .75rem;margin:.65rem 0;color:#c2c0da;font-size:.76rem}
+.eyebrow{color:#9b8be2;font-size:.7rem;font-weight:750;letter-spacing:.08em;text-transform:uppercase}
+.page-subtitle{font-size:.88rem;color:#a5a4bf;margin:.35rem 0 1.2rem}
+.mode-pill{display:inline-block;border:1px solid #493d74;background:#211d39;color:#c7b8ff;border-radius:999px;padding:.32rem .62rem;font-size:.72rem;font-weight:650}
+.dash-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin:.25rem 0 1rem;padding:.2rem 0 .75rem;border-bottom:1px solid #262541}
+.dash-hero h2{font-size:1.55rem!important;margin:0;color:#f3f0ff}.dash-hero p{margin:.22rem 0 0;color:#9695b5;font-size:.78rem}
+.dash-note{padding:.65rem .72rem;border:1px solid #4b3e24;border-radius:9px;background:#211c17;color:#e5c98f;font-size:.72rem;line-height:1.5}
+.dash-tag{display:inline-block;padding:.2rem .48rem;border:1px solid #39335e;border-radius:999px;color:#b9a9ff;background:#211d3d;font-size:.62rem;white-space:nowrap}
+hr{border-color:#2b2a42}
+@media(max-width:800px){.block-container{padding:.8rem 1rem 2rem}.dash-hero{align-items:flex-start;flex-direction:column}}
+</style>
+""", unsafe_allow_html=True)
 
 
 @st.cache_data
-def make_demo_data() -> pd.DataFrame:
-    """Build repeatable example events; no external or personal data is used."""
+def demo_events() -> pd.DataFrame:
+    """Create repeatable, anonymous example data for the hosted showcase."""
     rng = np.random.default_rng(20261107)
-    rows = 18_000
+    size = 18_000
     start = pd.Timestamp("2025-01-01", tz="UTC")
-    times = start + pd.to_timedelta(rng.integers(0, 90 * 24 * 60, rows), unit="m")
-    types = rng.choice(["view", "addtocart", "transaction"], rows, p=[0.82, 0.14, 0.04])
-    items = rng.choice(np.arange(10001, 10101), rows, p=np.linspace(1, 2, 100) / np.linspace(1, 2, 100).sum())
-    visitors = rng.integers(100000, 106500, rows)
-    frame = pd.DataFrame({"event_time": times, "event_type": types, "item_id": items, "visitor_id": visitors})
+    times = start + pd.to_timedelta(rng.integers(0, 90 * 24 * 60, size), unit="m")
+    kinds = rng.choice(EVENT_TYPES, size, p=[0.82, 0.14, 0.04])
+    item_ids = rng.choice(np.arange(10001, 10101), size)
+    visitor_ids = rng.integers(100000, 106500, size)
+    frame = pd.DataFrame({"event_time": times, "event_type": kinds, "item_id": item_ids, "visitor_id": visitor_ids})
     frame["event_date"] = frame["event_time"].dt.date
     return frame.sort_values("event_time").reset_index(drop=True)
 
 
-events = make_demo_data()
-st.markdown("# E-Commerce Behavior Analytics")
-st.caption("Portfolio preview · historical-style example data · no live store or streaming pipeline is connected")
-st.info(
-    "This hosted preview uses generated sample events so it can run without Kafka, Spark, or the large local dataset. "
-    "For the full replay pipeline, run the Docker Compose version from the project README.",
-    icon="ℹ️",
-)
+def dark_chart(fig, height=330):
+    fig.update_layout(
+        height=height,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font_color="#d7d4eb",
+        legend_title_text="",
+        margin=dict(l=8, r=8, t=16, b=8),
+        xaxis=dict(gridcolor="#292943", zerolinecolor="#292943"),
+        yaxis=dict(gridcolor="#292943", zerolinecolor="#292943"),
+    )
+    return fig
 
-min_day = events["event_date"].min()
-max_day = events["event_date"].max()
+
+events = demo_events()
 with st.sidebar:
-    st.header("Explore the sample")
-    date_range = st.date_input("Event date range", value=(min_day, max_day), min_value=min_day, max_value=max_day)
-    event_type = st.multiselect("Event type", ["view", "addtocart", "transaction"], default=["view", "addtocart", "transaction"])
-    st.caption("All values are generated for demonstration. They do not represent real customers or sales.")
+    st.markdown('<div class="side-brand">E-Commerce Monitor</div><div class="side-sub">RETAILROCKET ANALYTICS<br>Historical Behavior Dashboard</div>', unsafe_allow_html=True)
+    page = st.radio("WORKSPACE", PAGES, format_func=lambda value: PAGE_LABELS[value], label_visibility="visible", key="cloud_main_page")
+    st.markdown('<div class="side-status">◉ &nbsp; Portfolio Preview<br><span style="color:#87869f">Sample data · no live pipeline</span></div>', unsafe_allow_html=True)
+    st.caption("Click events are unavailable in the source project.")
+    st.markdown("#### Explore the sample")
+    min_day, max_day = events["event_date"].min(), events["event_date"].max()
+    dates = st.date_input("Event date range", value=(min_day, max_day), min_value=min_day, max_value=max_day, key="cloud_dates")
+    if "cloud_event_types" not in st.session_state:
+        st.session_state["cloud_event_types"] = EVENT_TYPES.copy()
+    selected_types = st.multiselect("Event type", EVENT_TYPES, key="cloud_event_types")
+    st.caption("All figures are generated examples, not real customer or sales data.")
 
-if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
-    start_day, end_day = date_range
+if isinstance(dates, (tuple, list)) and len(dates) == 2:
+    start_day, end_day = dates
 else:
-    start_day = end_day = date_range
-filtered = events[
-    events["event_date"].between(start_day, end_day)
-    & events["event_type"].isin(event_type)
-]
+    start_day = end_day = dates
+# Empty selection means all types so it cannot produce an empty dashboard.
+effective_types = selected_types or EVENT_TYPES
+filtered = events[events["event_date"].between(start_day, end_day) & events["event_type"].isin(effective_types)].copy()
 
-views = int((filtered.event_type == "view").sum())
-carts = int((filtered.event_type == "addtocart").sum())
-purchases = int((filtered.event_type == "transaction").sum())
-visitors_count = int(filtered.visitor_id.nunique())
-conversion = (purchases / views * 100) if views else 0
+views = int(filtered["event_type"].eq("view").sum())
+carts = int(filtered["event_type"].eq("addtocart").sum())
+transactions = int(filtered["event_type"].eq("transaction").sum())
+visitors = int(filtered["visitor_id"].nunique())
+products = int(filtered["item_id"].nunique())
+conversion = transactions / views * 100 if views else 0.0
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Sample events", f"{len(filtered):,}")
-c2.metric("Sample visitors", f"{visitors_count:,}")
-c3.metric("Transaction events", f"{purchases:,}")
-c4.metric("Transactions / views", f"{conversion:.2f}%")
+st.markdown('<div class="eyebrow">E-COMMERCE REAL-TIME ANALYTICS · PORTFOLIO PREVIEW</div>', unsafe_allow_html=True)
+st.markdown('<div class="page-subtitle">Historical-style example events &nbsp; <span class="mode-pill">Generated sample · offline analytics</span></div>', unsafe_allow_html=True)
 
-left, right = st.columns([1.65, 1])
-with left:
-    st.subheader("Event activity over time")
+
+def kpis():
+    cols = st.columns(4)
+    values = [
+        ("Sample events", f"{len(filtered):,}", "Generated event records"),
+        ("Sample visitors", f"{visitors:,}", "Distinct example IDs"),
+        ("Product views", f"{views:,}", f"{carts:,} cart additions"),
+        ("Transactions / views", f"{conversion:.2f}%", f"{transactions:,} transaction events"),
+    ]
+    for col, (label, value, help_text) in zip(cols, values):
+        col.metric(label, value, help_text)
+
+
+def dashboard_page():
+    st.markdown('<div class="dash-hero"><div><h2>Dashboard Overview</h2><p>E-commerce behavior monitoring · generated example events</p></div><span class="dash-tag">HISTORICAL SAMPLE</span></div>', unsafe_allow_html=True)
+    kpis()
+    left, right = st.columns([1.65, 1])
     daily = filtered.groupby(["event_date", "event_type"]).size().rename("events").reset_index()
-    if daily.empty:
-        st.warning("No sample events match these filters.")
-    else:
-        fig = px.area(daily, x="event_date", y="events", color="event_type", color_discrete_map=COLORS)
-        fig.update_layout(legend_title_text="Event", xaxis_title="Date", yaxis_title="Events", margin=dict(l=8, r=8, t=15, b=8))
-        st.plotly_chart(fig, use_container_width=True)
-with right:
-    st.subheader("Event mix")
-    mix = filtered.groupby("event_type").size().rename("events").reset_index()
-    if mix.empty:
-        st.info("Choose at least one event type.")
-    else:
-        fig = px.pie(mix, names="event_type", values="events", hole=0.62, color="event_type", color_discrete_map=COLORS)
-        fig.update_layout(legend_title_text="Event", margin=dict(l=8, r=8, t=15, b=8))
-        st.plotly_chart(fig, use_container_width=True)
-
-left, right = st.columns([1, 1])
-with left:
-    st.subheader("Most viewed sample items")
-    top = filtered[filtered.event_type == "view"].groupby("item_id").size().nlargest(10).sort_values().rename("views").reset_index()
-    if not top.empty:
-        fig = px.bar(top, x="views", y="item_id", orientation="h", labels={"views": "Views", "item_id": "Sample item ID"}, color_discrete_sequence=[COLORS["view"]])
-        fig.update_layout(showlegend=False, margin=dict(l=8, r=8, t=15, b=8))
-        st.plotly_chart(fig, use_container_width=True)
-with right:
-    st.subheader("Recent sample events")
-    recent = filtered.tail(12).sort_values("event_time", ascending=False).copy()
+    with left:
+        with st.container(border=True):
+            st.markdown("#### Daily event trend")
+            if daily.empty:
+                st.info("No sample records in this date range.")
+            else:
+                fig = px.area(daily, x="event_date", y="events", color="event_type", color_discrete_map=EVENT_COLORS)
+                st.plotly_chart(dark_chart(fig, 310), use_container_width=True)
+    with right:
+        with st.container(border=True):
+            st.markdown("#### Purchase funnel")
+            funnel = pd.DataFrame({"Stage": ["Views", "Add to cart", "Transactions"], "Events": [views, carts, transactions]})
+            fig = go.Figure(go.Funnel(y=funnel["Stage"], x=funnel["Events"], marker={"color": [EVENT_COLORS[x] for x in EVENT_TYPES]}))
+            st.plotly_chart(dark_chart(fig, 310), use_container_width=True)
+    left, right = st.columns([1, 1])
+    top = filtered[filtered["event_type"].eq("view")].groupby("item_id").size().nlargest(8).sort_values().rename("views").reset_index()
+    recent = filtered.tail(10).sort_values("event_time", ascending=False).copy()
     recent["event_time"] = recent["event_time"].dt.strftime("%Y-%m-%d %H:%M UTC")
-    recent = recent.rename(columns={"event_time": "Event time", "event_type": "Event", "item_id": "Sample item", "visitor_id": "Sample visitor"})
-    st.dataframe(recent[["Event time", "Event", "Sample item", "Sample visitor"]], hide_index=True, use_container_width=True)
+    with left:
+        with st.container(border=True):
+            st.markdown("#### Most viewed sample products")
+            if top.empty:
+                st.info("No view events in the selected sample.")
+            else:
+                fig = px.bar(top, x="views", y="item_id", orientation="h", color_discrete_sequence=[EVENT_COLORS["view"]], labels={"views": "Views", "item_id": "Sample product ID"})
+                st.plotly_chart(dark_chart(fig, 285), use_container_width=True)
+    with right:
+        with st.container(border=True):
+            st.markdown("#### Recent sample events")
+            recent = recent.rename(columns={"event_time": "Event time", "event_type": "Event", "item_id": "Sample product", "visitor_id": "Sample visitor"})
+            st.dataframe(recent[["Event time", "Event", "Sample product", "Sample visitor"]], hide_index=True, use_container_width=True, height=285)
+    st.markdown('<div class="dash-note"><b>Data note.</b> This preview uses generated sample events. It does not connect to Retailrocket CSV files, Kafka, or Spark. The full local dashboard remains in app.py.</div>', unsafe_allow_html=True)
 
-st.download_button(
-    "Download filtered sample events (CSV)",
-    data=filtered.to_csv(index=False).encode("utf-8"),
-    file_name="ecommerce_sample_events.csv",
-    mime="text/csv",
-)
-st.caption("Source: generated demonstration data. Retailrocket source records contain views, cart additions, and transactions; this preview is not connected to them.")
+
+def render_page():
+    if page == "Dashboard":
+        dashboard_page()
+    elif page == "Capture Data":
+        st.markdown("## Data Ingestion Preview")
+        st.info("Live replay is not available in the hosted preview. The sample events below are pre-generated for exploration.")
+        kpis()
+        st.dataframe(filtered.tail(100).sort_values("event_time", ascending=False), hide_index=True, use_container_width=True)
+    elif page == "Event Stream":
+        st.markdown("## Sample Event Stream")
+        st.caption("Example event rows; no events are being streamed or processed live.")
+        st.dataframe(filtered.tail(500).sort_values("event_time", ascending=False), hide_index=True, use_container_width=True)
+    elif page == "Analytics":
+        st.markdown("## Transaction Analytics")
+        kpis()
+        a, b = st.columns(2)
+        mix = filtered.groupby("event_type").size().rename("events").reset_index()
+        with a:
+            with st.container(border=True):
+                st.markdown("#### Event mix")
+                if not mix.empty:
+                    fig = px.pie(mix, names="event_type", values="events", hole=.58, color="event_type", color_discrete_map=EVENT_COLORS)
+                    st.plotly_chart(dark_chart(fig), use_container_width=True)
+        with b:
+            with st.container(border=True):
+                st.markdown("#### Product activity")
+                product_stats = filtered.pivot_table(index="item_id", columns="event_type", values="visitor_id", aggfunc="count", fill_value=0).reset_index()
+                st.dataframe(product_stats.sort_values("view", ascending=False).head(20) if "view" in product_stats else product_stats.head(20), hide_index=True, use_container_width=True)
+    elif page == "Pipeline":
+        st.markdown("## Pipeline Status")
+        st.info("This public preview runs as a single Streamlit app. Kafka and Spark are omitted here; they remain available in the Docker Compose version.")
+        a, b, c = st.columns(3)
+        a.metric("Preview app", "Online")
+        b.metric("Sample data", f"{len(filtered):,} rows")
+        c.metric("Live processing", "Disabled")
+        with st.container(border=True):
+            st.markdown("#### Preview architecture")
+            st.code("Generated sample events  →  Streamlit analytics dashboard", language="text")
+    elif page == "Database":
+        st.markdown("## Sample Data Explorer")
+        st.caption("No persistent database is connected in the hosted preview.")
+        st.dataframe(filtered, hide_index=True, use_container_width=True)
+    elif page == "Visualization":
+        st.markdown("## Product Analytics")
+        kpis()
+        a, b = st.columns(2)
+        daily = filtered.groupby(["event_date", "event_type"]).size().rename("events").reset_index()
+        with a:
+            with st.container(border=True):
+                st.markdown("#### Event trend")
+                if not daily.empty:
+                    st.plotly_chart(dark_chart(px.line(daily, x="event_date", y="events", color="event_type", color_discrete_map=EVENT_COLORS, markers=True)), use_container_width=True)
+        with b:
+            with st.container(border=True):
+                st.markdown("#### Top products by views")
+                top = filtered[filtered["event_type"].eq("view")].groupby("item_id").size().nlargest(15).sort_values().rename("views").reset_index()
+                if not top.empty:
+                    fig = px.bar(top, x="views", y="item_id", orientation="h", color_discrete_sequence=[EVENT_COLORS["view"]], labels={"item_id": "Sample product ID", "views": "Views"})
+                    st.plotly_chart(dark_chart(fig, 400), use_container_width=True)
+    elif page == "Tableau Exports":
+        st.markdown("## Reports and Exports")
+        st.caption("Download the currently filtered generated sample rows for exploration.")
+        metrics = pd.DataFrame([{"sample_events": len(filtered), "sample_visitors": visitors, "views": views, "cart_additions": carts, "transactions": transactions, "transactions_per_view_pct": round(conversion, 3), "sample_products": products}])
+        st.download_button("Download sample events as CSV", filtered.to_csv(index=False).encode("utf-8"), "ecommerce_sample_events.csv", "text/csv")
+        st.download_button("Download sample metrics as CSV", metrics.to_csv(index=False).encode("utf-8"), "ecommerce_sample_metrics.csv", "text/csv")
+
+
+render_page()
+st.caption("Generated portfolio data · no real customers · no live Kafka/Spark processing")
